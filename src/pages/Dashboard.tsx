@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import PeerCard from "@/components/PeerCard";
+import RecommendationPanel from "@/components/recommendations/RecommendationPanel";
 import SessionCard from "@/components/SessionCard";
 import StreakStats from "@/components/StreakStats";
 import { useAuth } from "@/contexts/useAuth";
@@ -23,6 +24,9 @@ interface Profile {
   sessions_completed: number | null;
   points: number | null;
   badges: string[] | null;
+  streak: number;
+  last_active: string | null;
+  updated_at: string | null;
 }
 interface Session {
   id: string;
@@ -345,6 +349,8 @@ const Dashboard = () => {
         </div>
         {/* Analytics */}
         <AnalyticsCharts profile={profile} sessions={upcomingSessions} />
+
+        <RecommendationPanel profile={profile} sessions={upcomingSessions} />
 
 
         {/* MAIN */}
