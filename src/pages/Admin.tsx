@@ -15,7 +15,6 @@ interface UserProfile {
   name: string;
   email: string;
   skills: string[] | null;
-  
   points: number | null;
   sessions_completed: number | null;
   created_at: string;
@@ -32,25 +31,30 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [activeTodayCount, setActiveTodayCount] = useState(0);
 
- useEffect(() => {
-  if (!user) return;
-
-  checkAdminRole();
-
-}, [user]);
+  useEffect(() => {
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    checkAdminRole();
+  }, [user]);
 
   const checkAdminRole = async () => {
+    if (!user?.id) {
+      setIsAdmin(false);
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Query user_roles table to check if user has admin role
       const { data: adminRole, error } = await supabase
         .from("user_roles")
         .select("role")
         .eq("user_id", user.id)
         .eq("role", "admin")
-        .single();
+        .maybeSingle();
 
-      if (error && error.code !== "PGRST116") {
-        // PGRST116 = no rows found, which is expected for non-admin users
+      if (error) {
         console.error("Error checking admin role:", error);
         setIsAdmin(false);
         setLoading(false);
@@ -59,7 +63,7 @@ const Admin = () => {
 
       if (adminRole && adminRole.role === "admin") {
         setIsAdmin(true);
-        fetchUsers();
+        await fetchUsers();
       } else {
         setIsAdmin(false);
         setLoading(false);
@@ -73,14 +77,27 @@ const Admin = () => {
 
   const fetchUsers = async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .select("id, name, email, skills, points, sessions_completed, created_at, last_active_at")
         .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
       if (data) {
-        setUsers(data);
-        // Calculate active users (active in the last 24 hours)
-        const activeCount = calculateActiveTodayCount(data);
+        const formattedUsers: UserProfile[] = data.map((profile: any) => ({
+          id: profile.id,
+          name: profile.name || "Unknown User",
+          email: profile.email || "",
+          skills: Array.isArray(profile.skills) ? profile.skills : null,
+          points: profile.points,
+          sessions_completed: profile.sessions_completed,
+          created_at: profile.created_at,
+          last_active_at: profile.last_active_at
+        }));
+
+        setUsers(formattedUsers);
+        const activeCount = calculateActiveTodayCount(formattedUsers);
         setActiveTodayCount(activeCount);
       }
     } catch (err) {
@@ -93,17 +110,6 @@ const Admin = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const calculateActiveTodayCount = (userList: UserProfile[]): number => {
-    const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    
-    return userList.filter(u => {
-      if (!u.last_active_at) return false;
-      const lastActive = new Date(u.last_active_at);
-      return lastActive >= oneDayAgo;
-    }).length;
   };
 
   const calculateActiveTodayCount = (userList: UserProfile[]): number => {
@@ -147,7 +153,7 @@ const Admin = () => {
   }
 
   return (
-    <div className="min-h-screen  py-8">
+    <div className="min-h-screen py-8">
       <div className="container">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="font-heading text-3xl font-extrabold flex items-center gap-2">

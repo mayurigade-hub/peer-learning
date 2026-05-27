@@ -89,8 +89,6 @@ export default function Landing() {
 
   const [open, setOpen] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  
-  const [loading, setLoading] = useState(true); 
   const [showBackToTop, setShowBackToTop] = useState(false); 
   const [streak, setStreak] = useState<number | null>(null);
 
@@ -101,22 +99,21 @@ export default function Landing() {
   }, []);
 
   useEffect(() => {
-  const handleScroll = () => {
-    setShowBackToTop(window.scrollY > 300);
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 300);
+    };
+
+    window.addEventListener("scroll", handleScroll);
+
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
-
-  window.addEventListener("scroll", handleScroll);
-
-  return () => window.removeEventListener("scroll", handleScroll);
-}, []);
-
-const scrollToTop = () => {
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth",
-  });
-};
-
 
   useEffect(() => {
     // Device-local daily streak using localStorage
@@ -260,41 +257,41 @@ const scrollToTop = () => {
 
           <div className="flex items-center gap-4">
             <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-xl text-slate-300 hover:text-cyan-400"
-                title="Theme: Dark (Default)"
-              >
-                <Moon className="h-5 w-5 text-cyan-400" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" sideOffset={8} className="z-[1001] bg-[#0b1329] border-white/10 text-white min-w-[12rem]">
-              <DropdownMenuLabel className="text-gray-400 font-semibold text-xs px-2 py-1">Select Theme</DropdownMenuLabel>
-              <DropdownMenuSeparator className="bg-white/10" />
-              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("default")}>
-                <span className="h-2 w-2 rounded-full bg-cyan-400" />
-                <span className="text-cyan-400 font-medium">Default</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("purple")}>
-                <span className="h-2 w-2 rounded-full bg-purple-500" />
-                <span className="text-purple-400 font-medium">Purple Galaxy</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("blue")}>
-                <span className="h-2 w-2 rounded-full bg-blue-500" />
-                <span className="text-blue-400 font-medium">Ocean Blue</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("green")}>
-                <span className="h-2 w-2 rounded-full bg-green-500" />
-                <span className="text-green-400 font-medium">Neon Green</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("orange")}>
-                <span className="h-2 w-2 rounded-full bg-orange-500" />
-                <span className="text-orange-400 font-medium">Sunset Orange</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 rounded-xl text-slate-300 hover:text-cyan-400"
+                  title="Theme: Dark (Default)"
+                >
+                  <Moon className="h-5 w-5 text-cyan-400" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={8} className="z-[1010] bg-[#0b1329] border-white/10 text-white min-w-[12rem]">
+                <DropdownMenuLabel className="text-gray-400 font-semibold text-xs px-2 py-1">Select Theme</DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("default")}>
+                  <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                  <span className="text-cyan-400 font-medium">Default</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("purple")}>
+                  <span className="h-2 w-2 rounded-full bg-purple-500" />
+                  <span className="text-purple-400 font-medium">Purple Galaxy</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("blue")}>
+                  <span className="h-2 w-2 rounded-full bg-blue-500" />
+                  <span className="text-blue-400 font-medium">Ocean Blue</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("green")}>
+                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                  <span className="text-green-400 font-medium">Neon Green</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem className="flex items-center gap-2 cursor-pointer focus:bg-white/10 hover:bg-white/10 focus:text-white px-3 py-2 text-sm rounded-lg" onClick={() => setTheme("orange")}>
+                  <span className="h-2 w-2 rounded-full bg-orange-500" />
+                  <span className="text-orange-400 font-medium">Sunset Orange</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
             <Link to="/login">
               <Button
@@ -315,14 +312,7 @@ const scrollToTop = () => {
       </nav>
 
       {/* Hero */}
-      {/* <section className="container relative grid items-center gap-16 px-6 pb-24 pt-24 lg:grid-cols-2">
-        <motion.div
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-        > */}
-
-      <section className="container relative grid items-center gap-16 px-6 pb-24 pt-24 lg:grid-cols-2">
+      <section className="container relative grid items-center gap-16 px-6 pb-24 pt-36 lg:grid-cols-2">
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
@@ -339,8 +329,7 @@ const scrollToTop = () => {
               {" "}
               Seniors
             </span>
-            .
-            <br />
+            .<br />
             Grow With
             <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-sky-500 bg-clip-text text-transparent">
               {" "}
@@ -409,13 +398,13 @@ const scrollToTop = () => {
             transition={{ duration: 4, repeat: Infinity }}
             className="absolute -left-8 top-10 rounded-3xl border border-white/10 bg-white/10 p-5 backdrop-blur-2xl"
           >
-              <div className="flex items-center gap-3">
-                <Flame className="text-cyan-400" />
-                <div>
-                  <p className="text-sm text-slate-300">Your Streak</p>
-                  <h4 className="text-xl font-bold">{streak === null ? "—" : `${streak} Days 🔥`}</h4>
-                </div>
+            <div className="flex items-center gap-3">
+              <Flame className="text-cyan-400" />
+              <div>
+                <p className="text-sm text-slate-300">Your Streak</p>
+                <h4 className="text-xl font-bold">{streak === null ? "—" : `${streak} Days 🔥`}</h4>
               </div>
+            </div>
           </motion.div>
 
           <motion.div
@@ -757,7 +746,7 @@ const scrollToTop = () => {
           className="fixed bottom-6 right-24 z-50 rounded-full bg-cyan-500 px-4 py-3 text-black shadow-lg transition hover:bg-cyan-400"
           aria-label="Back to top"
         >
-        ↑
+          ↑
         </button>
       )}
     </motion.div>
