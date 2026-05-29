@@ -245,27 +245,35 @@ const [summaryLoading, setSummaryLoading] =
 
   // USER ACTIVITY TRACKER
   useEffect(() => {
-    let idleTimer: any;
+    let idleTimer: ReturnType<typeof setTimeout>;
+    let throttleTimer: ReturnType<typeof setTimeout>;
+    let lastMove = 0;
 
     const handleActivity = () => {
       setUserStatus("Active");
-
       clearTimeout(idleTimer);
-
       idleTimer = setTimeout(() => {
         setUserStatus("Idle");
       }, 15000);
     };
 
-    window.addEventListener("mousemove", handleActivity);
-    window.addEventListener("keydown", handleActivity);
-    window.addEventListener("click", handleActivity);
+    const throttledMove = (e: MouseEvent) => {
+      const now = Date.now();
+      if (now - lastMove < 200) return;
+      lastMove = now;
+      handleActivity();
+    };
+
+    window.addEventListener("mousemove", throttledMove, { passive: true });
+    window.addEventListener("keydown", handleActivity, { passive: true });
+    window.addEventListener("click", handleActivity, { passive: true });
 
     handleActivity();
 
     return () => {
       clearTimeout(idleTimer);
-      window.removeEventListener("mousemove", handleActivity);
+      clearTimeout(throttleTimer);
+      window.removeEventListener("mousemove", throttledMove);
       window.removeEventListener("keydown", handleActivity);
       window.removeEventListener("click", handleActivity);
     };
