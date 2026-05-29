@@ -236,6 +236,34 @@ const Sessions = () => {
     });
   }, [messages]);
 
+  // USER ACTIVITY TRACKER
+  useEffect(() => {
+    let idleTimer: any;
+
+    const handleActivity = () => {
+      setUserStatus("Active");
+
+      clearTimeout(idleTimer);
+
+      idleTimer = setTimeout(() => {
+        setUserStatus("Idle");
+      }, 15000);
+    };
+
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("keydown", handleActivity);
+    window.addEventListener("click", handleActivity);
+
+    handleActivity();
+
+    return () => {
+      clearTimeout(idleTimer);
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("keydown", handleActivity);
+      window.removeEventListener("click", handleActivity);
+    };
+  }, []);
+
   // SEND MESSAGE
   const sendMessage = async () => {
     if (!message.trim() || !selectedSession) return;
@@ -640,6 +668,7 @@ const Sessions = () => {
 
               <div ref={messagesEndRef} />
             </div>
+
 
            {/* TYPING INDICATOR */}
             {isTyping && (
