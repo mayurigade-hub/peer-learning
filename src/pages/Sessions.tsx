@@ -568,13 +568,13 @@ const Sessions = () => {
 
             {/* MESSAGES */}
             <div className="flex-1 overflow-y-auto py-5 space-y-4">
-              {messages.map((msg, index) => {
+              {messages.map((msg) => {
                 const isCurrentUser =
                   msg.user_id === user?.id;
 
                 return (
                   <div
-                    key={index}
+                    key={msg.id}
                     className={`flex ${
                       isCurrentUser
                         ? "justify-end"
