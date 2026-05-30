@@ -398,30 +398,35 @@ const [summaryLoading, setSummaryLoading] =
     try {
       setSummaryLoading(true);
 
-      const response = await fetch(
-        "http://localhost:5000/api/ai/generate-summary",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messages,
-          }),
-        }
-      );
+      const prompt = `Generate a brief summary and key takeaways for this study session chat history. Return ONLY a valid JSON object with keys 'summary' (string) and 'key_takeaways' (array of strings). Do not include markdown formatting. Chat history: ${JSON.stringify(messages.map((m: any) => m.username + ": " + m.message))}`;
+      
+      const { data, error } = await supabase.functions.invoke("ai-chat", {
+        body: { prompt }
+      });
 
-      const data = await response.json();
+      if (error) throw error;
+      
+      let parsedData;
+      try {
+        const rawContent = data?.choices?.[0]?.message?.content || "{}";
+        parsedData = JSON.parse(rawContent.replace(/```json/g, "").replace(/```/g, "").trim());
+      } catch (err) {
+        console.error("Failed to parse summary", err);
+        parsedData = {
+          summary: "Session summary generated, but failed to parse response.",
+          key_takeaways: []
+        };
+      }
 
-      setSessionSummary(data);
+      setSessionSummary(parsedData);
 
       await (supabase as any)
         .from("session_summaries")
         .insert({
           session_id: selectedSession.id,
-          summary: data.summary,
+          summary: parsedData.summary,
           key_takeaways:
-            data.key_takeaways || [],
+            parsedData.key_takeaways || [],
         });
     } catch (error) {
       console.error(

@@ -167,24 +167,60 @@ const Discover = () => {
   const getMatchScore = (user: any) => {
     if (!currentUser) return 0;
 
-    const userSkills = Array.isArray(user.skills)
-      ? user.skills.map((s: string) => s.toLowerCase())
-      : (user.skills?.split(",") || []).map((s: string) => s.trim().toLowerCase());
+    const parseArray = (val: any) => {
+      if (Array.isArray(val)) return val.map((s: string) => s.toLowerCase().trim());
+      if (typeof val === "string") return val.split(",").map((s: string) => s.trim().toLowerCase()).filter(Boolean);
+      return [];
+    };
 
-    const myGoals = Array.isArray(currentUser.learning_goals)
-      ? currentUser.learning_goals.map((s: string) => s.toLowerCase())
-      : (currentUser.learning_goals?.split(",") || []).map((s: string) => s.trim().toLowerCase());
+    const userSkills = parseArray(user.skills);
+    const userGoals = parseArray(user.learning_goals);
+    
+    const mySkills = parseArray(currentUser.skills);
+    const myGoals = parseArray(currentUser.learning_goals);
 
-    return userSkills.filter((skill: string) =>
-      myGoals.includes(skill)
-    ).length;
+    let score = 0;
+    
+    // Weightings
+    const PRIMARY_WEIGHT = 40; // They have what I want
+    const SECONDARY_WEIGHT = 30; // I have what they want (mutual exchange)
+    const ALIGNMENT_WEIGHT = 10; // We want to learn the same thing (study buddies)
+
+    const maxPossibleScore = 
+      (myGoals.length > 0 ? PRIMARY_WEIGHT : 0) +
+      (mySkills.length > 0 ? SECONDARY_WEIGHT : 0) +
+      (myGoals.length > 0 ? ALIGNMENT_WEIGHT : 0) || 1; // avoid div by 0
+
+    const primaryMatches = userSkills.filter((skill: string) => myGoals.includes(skill)).length;
+    if (primaryMatches > 0 && myGoals.length > 0) {
+      score += (primaryMatches / myGoals.length) * PRIMARY_WEIGHT;
+    }
+
+    const reciprocalMatches = userGoals.filter((goal: string) => mySkills.includes(goal)).length;
+    if (reciprocalMatches > 0 && mySkills.length > 0) {
+      score += (reciprocalMatches / mySkills.length) * SECONDARY_WEIGHT;
+    }
+
+    const studyBuddyMatches = userGoals.filter((goal: string) => myGoals.includes(goal)).length;
+    if (studyBuddyMatches > 0 && myGoals.length > 0) {
+      score += (studyBuddyMatches / myGoals.length) * ALIGNMENT_WEIGHT;
+    }
+
+    let percentage = Math.min(Math.round((score / maxPossibleScore) * 100), 100);
+
+    // Baseline compatibility for active users in the same platform
+    if (percentage < 15 && (userSkills.length > 0 || userGoals.length > 0)) {
+       percentage = Math.floor(Math.random() * 10) + 15;
+    }
+
+    return percentage;
   };
 
   // FILTER & SCORE USERS (client-side match scoring only)
   useEffect(() => {
     if (!currentUser) return;
 
-    const matched = users
+    let matched = users
       .map((u) => ({
         ...u,
         score: getMatchScore(u),
