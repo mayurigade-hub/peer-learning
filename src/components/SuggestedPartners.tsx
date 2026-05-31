@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-
+import { API_BASE_URL } from "@/config/api";
 interface Partner {
   _id: string;
   name: string;
@@ -17,7 +17,7 @@ const SuggestedPartners = () => {
     const fetchPartners = async () => {
       try {
         const response = await fetch(
-          "http://localhost:5000/api/match/recommendations",
+          `${API_BASE_URL}/api/match/recommendations`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("token")}`,
