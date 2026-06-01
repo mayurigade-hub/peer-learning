@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "../utils/supabase.js";
 import { getRelatedSkills } from "../utils/skillGraph.js";
+import { sanitizeProfiles } from "../utils/dto.js";
 
 // 📚 Calculate compatibility score purely for textual reasons now
 const calculateCompatibilityScore = (currentUser, otherUser) => {
@@ -114,7 +115,7 @@ export const getRecommendedPartners = async (req, res) => {
     }
 
     // Now format the 20 returned users with reasons
-    const recommendations = (matchedUsers || []).map((user) => {
+    const rawRecommendations = (matchedUsers || []).map((user) => {
       // We pass through calculateCompatibilityScore ONLY to get the rich reason string
       // The score is already calculated perfectly by the database.
       const result = calculateCompatibilityScore(currentUser, user);
@@ -129,6 +130,9 @@ export const getRecommendedPartners = async (req, res) => {
         reason: result.reasons[0] || "You have similar learning interests and compatible skills.",
       };
     });
+    
+    // Strict schema sanitization to prevent accidental PII leakage
+    const recommendations = sanitizeProfiles(rawRecommendations);
 
     // In a real paginated RPC, getting exact total Count requires a separate count query. 
     // We'll estimate or just provide length for now since counting 1M rows can also be slow.
@@ -260,4 +264,3 @@ export const getSupabaseDiscover = async (req, res) => {
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
-
