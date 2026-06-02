@@ -1,8 +1,13 @@
-import { useContext, useEffect, useMemo, useRef, useState } from "react";
+import React, { memo, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, MessageCircle, Search, Send } from "lucide-react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 
 import { AuthContext } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useAwardXP } from "@/hooks/useAwardXP";
+const MarkdownRenderer = React.lazy(() =>
+  import("@/components/MarkdownRenderer").then((module) => ({ default: module.MarkdownRenderer }))
+);
 
 type Profile = {
   id: string;
@@ -37,6 +42,76 @@ type ChatMessage = {
   read_at?: string | null;
 };
 
+type ConversationRowProps = {
+  user: Profile;
+  isOnline: boolean;
+  isSelected: boolean;
+  onSelect: (user: Profile) => void;
+};
+
+const ConversationRow = memo(({ user, isOnline, isSelected, onSelect }: ConversationRowProps) => {
+  return (
+    <button
+      onClick={() => onSelect(user)}
+      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
+        isSelected
+          ? "border-cyan-400/60 bg-cyan-400/10"
+          : "border-transparent hover:border-white/10 hover:bg-white/5"
+      }`}
+    >
+      <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-500 text-sm font-semibold text-slate-950">
+        {getInitial(user)}
+        <span
+          className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-slate-900 ${
+            isOnline ? "bg-emerald-400" : "bg-slate-500"
+          }`}
+        />
+      </div>
+      <div className="min-w-0">
+        <p className="truncate font-medium">{getDisplayName(user)}</p>
+        <p className={isOnline ? "text-xs text-emerald-300" : "text-xs text-slate-500"}>
+          {isOnline ? "Online" : "Offline"}
+        </p>
+      </div>
+    </button>
+  );
+});
+
+type ChatBubbleProps = {
+  message: ChatMessage;
+  isMine: boolean;
+  timeLabel: string;
+  markdownRenderer: React.ComponentType<{ content: string; className?: string }>;
+};
+
+const ChatBubble = memo(
+  React.forwardRef<HTMLDivElement, ChatBubbleProps>(function ChatBubble(
+    { message, isMine, timeLabel, markdownRenderer: Markdown },
+    ref
+  ) {
+    const body = message.content || message.text || "";
+
+    return (
+      <div ref={ref} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+        <div
+          className={`max-w-[82%] rounded-2xl px-4 py-3 shadow-sm md:max-w-[68%] ${
+            isMine
+              ? "rounded-br-md bg-cyan-400 text-slate-950"
+              : "rounded-bl-md border border-white/10 bg-white/10 text-white"
+          }`}
+        >
+          <Suspense fallback={<p className="whitespace-pre-wrap break-words text-sm leading-6">{body}</p>}>
+            <Markdown content={body} className="whitespace-pre-wrap break-words text-sm leading-6" />
+          </Suspense>
+          <p className={`mt-1 text-[11px] ${isMine ? "text-slate-700" : "text-slate-400"}`}>
+            {timeLabel}
+          </p>
+        </div>
+      </div>
+    );
+  })
+);
+
 const getDisplayName = (profile?: Profile | null) =>
   profile?.name || profile?.email?.split("@")[0] || "Learner";
 
@@ -57,10 +132,13 @@ const Chat = () => {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [typingUserId, setTypingUserId] = useState<string | null>(null);
   const [showConversationList, setShowConversationList] = useState(true);
+  const awardXP = useAwardXP();
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stopTypingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const conversationsParentRef = useRef<HTMLDivElement | null>(null);
+  const messagesParentRef = useRef<HTMLDivElement | null>(null);
 
   const filteredUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -72,9 +150,25 @@ const Chat = () => {
     );
   }, [search, users]);
 
+  const conversationVirtualizer = useVirtualizer({
+    count: filteredUsers.length,
+    getScrollElement: () => conversationsParentRef.current,
+    estimateSize: () => 88,
+    overscan: 8,
+  });
+
+  const messageVirtualizer = useVirtualizer({
+    count: messages.length,
+    getScrollElement: () => messagesParentRef.current,
+    estimateSize: () => 88,
+    overscan: 12,
+  });
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, typingUserId]);
+    if (messages.length > 0) {
+      messageVirtualizer.scrollToIndex(messages.length - 1, { align: "end" });
+    }
+  }, [messages.length, messageVirtualizer]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -87,12 +181,14 @@ const Chat = () => {
           .from("profiles")
           .select("*")
           .neq("id", currentUser.id)
-          .order("name", { ascending: true }),
+          .order("name", { ascending: true })
+          .limit(100),
         supabase
           .from("users")
           .select("*")
           .neq("id", currentUser.id)
-          .order("name", { ascending: true }),
+          .order("name", { ascending: true })
+          .limit(100),
       ]);
 
       const mergedUsers = mergeUsers(
@@ -121,24 +217,26 @@ const Chat = () => {
           schema: "public",
           table: "profiles",
         },
-        () => {
-          void supabase
-            .from("profiles")
-            .select("*")
-            .neq("id", currentUser.id)
-            .order("name", { ascending: true })
-            .then(({ data: profileData }) => {
-              void supabase
-                .from("users")
-                .select("*")
-                .neq("id", currentUser.id)
-                .order("name", { ascending: true })
-                .then(({ data: userData }) => {
-                  setUsers(
-                    mergeUsers((profileData ?? []) as Profile[], (userData ?? []) as UserRow[])
-                  );
-                });
-            });
+        (payload) => {
+          if (payload.eventType === "DELETE") {
+            setUsers((prev) => prev.filter((u) => u.id !== payload.old.id));
+            return;
+          }
+
+          const updatedProfile = payload.new as Profile;
+          if (updatedProfile.id === currentUser.id) return;
+
+          setUsers((prev) => {
+            const index = prev.findIndex((u) => u.id === updatedProfile.id);
+            if (index !== -1) {
+              const newUsers = [...prev];
+              newUsers[index] = { ...newUsers[index], ...updatedProfile };
+              return newUsers.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+            } else {
+              const newUsers = [...prev, updatedProfile];
+              return newUsers.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+            }
+          });
         }
       )
       .subscribe();
@@ -203,6 +301,25 @@ const Chat = () => {
 
     loadMessages();
 
+    const handleNewMessage = (payload: any) => {
+      const nextMessage = payload.new as ChatMessage;
+      const belongsToOpenChat =
+        (nextMessage.sender_id === currentUser.id &&
+          nextMessage.receiver_id === selectedUser.id) ||
+        (nextMessage.sender_id === selectedUser.id &&
+          nextMessage.receiver_id === currentUser.id);
+
+      if (!belongsToOpenChat) return;
+
+      setMessages((previous) => {
+        if (previous.some((message) => message.id === nextMessage.id)) {
+          return previous;
+        }
+
+        return [...previous, nextMessage];
+      });
+    };
+
     const messageChannel = supabase
       .channel(`chat-messages-${currentUser.id}-${selectedUser.id}`)
       .on(
@@ -211,31 +328,33 @@ const Chat = () => {
           event: "INSERT",
           schema: "public",
           table: "messages",
+          filter: `receiver_id=eq.${currentUser.id}`,
         },
-        (payload) => {
-          const nextMessage = payload.new as ChatMessage;
-          const belongsToOpenChat =
-            (nextMessage.sender_id === currentUser.id &&
-              nextMessage.receiver_id === selectedUser.id) ||
-            (nextMessage.sender_id === selectedUser.id &&
-              nextMessage.receiver_id === currentUser.id);
-
-          if (!belongsToOpenChat) return;
-
-          setMessages((previous) => {
-            if (previous.some((message) => message.id === nextMessage.id)) {
-              return previous;
-            }
-
-            return [...previous, nextMessage];
-          });
-        }
+        handleNewMessage
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "messages",
+          filter: `sender_id=eq.${currentUser.id}`,
+        },
+        handleNewMessage
       )
       .subscribe();
 
+    let lastTypingUpdate = 0;
+
     const typingChannel = supabase
-      .channel(`chat-typing-${[currentUser.id, selectedUser.id].sort().join("-")}`)
+      .channel(`chat-typing-${[currentUser.id, selectedUser.id].sort().join("-")}`, {
+        config: { private: true },
+      })
       .on("broadcast", { event: "typing" }, ({ payload }) => {
+        const now = Date.now();
+        if (now - lastTypingUpdate < 300) return; // Drop excessive messages to prevent DoS
+        lastTypingUpdate = now;
+
         if (payload.senderId !== selectedUser.id) return;
 
         setTypingUserId(payload.isTyping ? payload.senderId : null);
@@ -262,11 +381,13 @@ const Chat = () => {
     };
   }, [currentUser?.id, selectedUser?.id]);
 
-  const sendTypingStatus = async (isTyping: boolean) => {
+  const sendTypingStatus = useCallback(async (isTyping: boolean) => {
     if (!currentUser?.id || !selectedUser?.id) return;
 
     await supabase
-      .channel(`chat-typing-${[currentUser.id, selectedUser.id].sort().join("-")}`)
+      .channel(`chat-typing-${[currentUser.id, selectedUser.id].sort().join("-")}`, {
+        config: { private: true },
+      })
       .send({
         type: "broadcast",
         event: "typing",
@@ -276,9 +397,9 @@ const Chat = () => {
           isTyping,
         },
       });
-  };
+  }, [currentUser?.id, selectedUser?.id]);
 
-  const handleMessageChange = (value: string) => {
+  const handleMessageChange = useCallback((value: string) => {
     setMessageText(value);
     sendTypingStatus(Boolean(value.trim()));
 
@@ -289,9 +410,9 @@ const Chat = () => {
     stopTypingTimeoutRef.current = setTimeout(() => {
       sendTypingStatus(false);
     }, 1200);
-  };
+  }, [sendTypingStatus]);
 
-  const sendMessage = async () => {
+  const sendMessage = useCallback(async () => {
     const content = messageText.trim();
 
     if (!content || !currentUser?.id || !selectedUser?.id) return;
@@ -314,14 +435,16 @@ const Chat = () => {
     if (error) {
       setMessageText(content);
       console.error("Failed to send message:", error.message);
+    } else {
+      awardXP.mutate({ activity: "chat_message" });
     }
-  };
+  }, [currentUser?.id, messageText, selectedUser?.id, sendTypingStatus, awardXP]);
 
-  const selectUser = (user: Profile) => {
+  const selectUser = useCallback((user: Profile) => {
     setSelectedUser(user);
     setShowConversationList(false);
     setTypingUserId(null);
-  };
+  }, []);
 
   if (!currentUser) {
     return (
@@ -362,7 +485,7 @@ const Chat = () => {
             </label>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3">
+          <div ref={conversationsParentRef} className="flex-1 overflow-y-auto p-3">
             {loadingUsers ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((item) => (
@@ -374,36 +497,31 @@ const Chat = () => {
                 No learners found.
               </div>
             ) : (
-              <div className="space-y-2">
-                {filteredUsers.map((user) => {
-                  const isOnline = onlineUsers.includes(user.id);
-                  const isSelected = selectedUser?.id === user.id;
+              <div style={{ height: `${conversationVirtualizer.getTotalSize()}px`, position: "relative" }}>
+                {conversationVirtualizer.getVirtualItems().map((virtualItem) => {
+                  const user = filteredUsers[virtualItem.index];
 
                   return (
-                    <button
+                    <div
                       key={user.id}
-                      onClick={() => selectUser(user)}
-                      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${
-                        isSelected
-                          ? "border-cyan-400/60 bg-cyan-400/10"
-                          : "border-transparent hover:border-white/10 hover:bg-white/5"
-                      }`}
+                      data-index={virtualItem.index}
+                      ref={conversationVirtualizer.measureElement}
+                      style={{
+                        transform: `translateY(${virtualItem.start}px)`,
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                      }}
+                      className="pb-2"
                     >
-                      <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-500 text-sm font-semibold text-slate-950">
-                        {getInitial(user)}
-                        <span
-                          className={`absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-slate-900 ${
-                            isOnline ? "bg-emerald-400" : "bg-slate-500"
-                          }`}
-                        />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="truncate font-medium">{getDisplayName(user)}</p>
-                        <p className={isOnline ? "text-xs text-emerald-300" : "text-xs text-slate-500"}>
-                          {isOnline ? "Online" : "Offline"}
-                        </p>
-                      </div>
-                    </button>
+                      <ConversationRow
+                        user={user}
+                        isOnline={onlineUsers.includes(user.id)}
+                        isSelected={selectedUser?.id === user.id}
+                        onSelect={selectUser}
+                      />
+                    </div>
                   );
                 })}
               </div>
@@ -444,7 +562,7 @@ const Chat = () => {
                 </div>
               </header>
 
-              <div className="flex-1 space-y-4 overflow-y-auto px-4 py-5">
+              <div ref={messagesParentRef} className="flex-1 overflow-y-auto px-4 py-5">
                 {loadingMessages ? (
                   <div className="space-y-4">
                     <div className="h-14 w-56 animate-pulse rounded-2xl bg-white/10" />
@@ -455,39 +573,48 @@ const Chat = () => {
                     Start the conversation with {getDisplayName(selectedUser)}.
                   </div>
                 ) : (
-                  messages.map((message) => {
-                    const isMine = message.sender_id === currentUser.id;
-                    const body = message.content || message.text || "";
+                  <div style={{ height: `${messageVirtualizer.getTotalSize()}px`, position: "relative" }}>
+                    {messageVirtualizer.getVirtualItems().map((virtualItem) => {
+                      const message = messages[virtualItem.index];
+                      const isMine = message.sender_id === currentUser.id;
 
-                    return (
-                      <div key={message.id} className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                      return (
                         <div
-                          className={`max-w-[82%] rounded-2xl px-4 py-3 shadow-sm md:max-w-[68%] ${
-                            isMine
-                              ? "rounded-br-md bg-cyan-400 text-slate-950"
-                              : "rounded-bl-md border border-white/10 bg-white/10 text-white"
-                          }`}
+                          key={message.id}
+                          data-index={virtualItem.index}
+                          ref={messageVirtualizer.measureElement}
+                          style={{
+                            transform: `translateY(${virtualItem.start}px)`,
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                          }}
+                          className="pb-4"
                         >
-                          <p className="whitespace-pre-wrap break-words text-sm leading-6">{body}</p>
-                          <p className={`mt-1 text-[11px] ${isMine ? "text-slate-700" : "text-slate-400"}`}>
-                            {message.created_at
-                              ? new Date(message.created_at).toLocaleTimeString([], {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })
-                              : "Just now"}
-                          </p>
+                          <ChatBubble
+                            message={message}
+                            isMine={isMine}
+                            timeLabel={
+                              message.created_at
+                                ? new Date(message.created_at).toLocaleTimeString([], {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })
+                                : "Just now"
+                            }
+                            markdownRenderer={MarkdownRenderer as React.ComponentType<{ content: string; className?: string }>}
+                          />
                         </div>
-                      </div>
-                    );
-                  })
+                      );
+                    })}
+                  </div>
                 )}
 
                 {typingUserId === selectedUser.id && (
                   <div className="text-sm text-cyan-300">{getDisplayName(selectedUser)} is typing...</div>
                 )}
 
-                <div ref={messagesEndRef} />
               </div>
 
               <div className="border-t border-white/10 p-4">

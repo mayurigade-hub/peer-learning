@@ -1,2 +1,0 @@
-forgotPassword
-resetPassword

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Bot, Send, X, User } from "lucide-react";
-
+import { API_BASE_URL } from "@/config/api";
 const FloatingAI = () => {
   const [open, setOpen] =
     useState(false);
@@ -41,11 +41,15 @@ const FloatingAI = () => {
     setLoading(true);
 
     try {
-      // Route the request through the backend so the API key stays server-side.
-      const response = await fetch("/api/chat", {
+      // The /api/chat endpoint is protected by requireAuth middleware.
+      // Retrieve the session token from localStorage to authenticate.
+      const token = localStorage.getItem("token");
+
+      const response = await fetch(`${API_BASE_URL}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           messages: [{ role: "user", content: prompt }],
@@ -54,9 +58,32 @@ const FloatingAI = () => {
         }),
       });
 
+      if (response.status === 401) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "Please log in to use the AI assistant.",
+          },
+        ]);
+        setLoading(false);
+        return;
+      }
+
+      if (!response.ok) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `Server error (${response.status}). Please try again later.`,
+          },
+        ]);
+        setLoading(false);
+        return;
+      }
+
       const data = await response.json();
 
-      // ERROR HANDLING
       if (data.error) {
         setMessages((prev) => [
           ...prev,
@@ -65,15 +92,12 @@ const FloatingAI = () => {
             content: data.error,
           },
         ]);
-
         setLoading(false);
-
         return;
       }
 
-      const aiReply = data?.reply || "AI could not respond 😔";
+      const aiReply = data?.reply || "AI could not respond";
 
-      // AI MESSAGE
       setMessages((prev) => [
         ...prev,
         {
@@ -82,14 +106,14 @@ const FloatingAI = () => {
         },
       ]);
     } catch (error) {
-      console.log(error);
+      console.error("FloatingAI fetch error:", error);
 
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content:
-            "AI failed 😔",
+            "Network error. Please check your connection and try again.",
         },
       ]);
     }

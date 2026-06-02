@@ -6,6 +6,14 @@ import ParticipantCard from "./studyroom/ParticipantCard";
 import StudyTimer from "./studyroom/StudyTimer";
 import ActivityFeed from "./studyroom/ActivityFeed";
 
+import React, { Suspense } from 'react';
+
+const Whiteboard = React.lazy(() => import('./Whiteboard/Whiteboard'));
+const MarkdownRenderer = React.lazy(() =>
+  import('@/components/MarkdownRenderer').then((module) => ({ default: module.MarkdownRenderer }))
+);
+
+
 export default function Room() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -16,6 +24,9 @@ export default function Room() {
   const [newMessage, setNewMessage] = useState('');
   const [participants, setParticipants] = useState<any[]>([]);
   const [activities, setActivities] = useState<string[]>([]);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [isInviting, setIsInviting] = useState(false);
+  const [showInviteUI, setShowInviteUI] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -91,7 +102,13 @@ export default function Room() {
 
   const fetchRoomDetails = async () => {
     const { data, error } = await supabase.from('study_rooms' as any).select('*').eq('id', id).single();
-    if (error) console.error("Error fetching room:", error);
+    if (error) {
+      console.error("Error fetching room:", error);
+      if (error.code === 'PGRST116') {
+        alert("Room not found or you don't have access.");
+        navigate('/rooms');
+      }
+    }
     if (data) setRoom(data);
   };
 
@@ -131,6 +148,25 @@ export default function Room() {
     }
   };
 
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) return;
+    setIsInviting(true);
+    const { error } = await (supabase.rpc as any)('invite_to_study_room', {
+      p_room_id: id,
+      p_user_email: inviteEmail
+    });
+    
+    if (error) {
+      console.error("Invite error:", error);
+      alert(error.message || "Failed to invite user.");
+    } else {
+      alert(`Invited ${inviteEmail} successfully!`);
+      setInviteEmail('');
+      setShowInviteUI(false);
+    }
+    setIsInviting(false);
+  };
+
   if (!room) return <div className="min-h-screen bg-[#0B1120] text-white p-12 text-center">Loading Room...</div>;
 
   return (
@@ -146,16 +182,47 @@ export default function Room() {
               <span>💬 {messages.length} Messages</span>
             </div>
           </div>
-          <button 
-            onClick={() => navigate('/rooms')}
-            className="text-sm bg-red-600/10 text-red-500 font-medium hover:bg-red-600/20 px-5 py-2.5 rounded-lg transition"
-          >
-            Leave Room
-          </button>
+          <div className="flex gap-3">
+            {room.is_private && room.created_by === user?.id && (
+              <div className="relative">
+                <button 
+                  onClick={() => setShowInviteUI(!showInviteUI)}
+                  className="text-sm bg-blue-600/10 text-blue-400 font-medium hover:bg-blue-600/20 px-5 py-2.5 rounded-lg transition"
+                >
+                  Invite
+                </button>
+                {showInviteUI && (
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-slate-900 border border-slate-700 rounded-lg shadow-xl p-3 z-10 flex flex-col gap-2">
+                    <input 
+                      type="email" 
+                      placeholder="User email address" 
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 text-white px-3 py-2 rounded text-sm focus:outline-none focus:border-blue-500"
+                    />
+                    <button 
+                      onClick={handleInvite}
+                      disabled={isInviting || !inviteEmail.trim()}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 rounded disabled:opacity-50"
+                    >
+                      {isInviting ? 'Inviting...' : 'Send Invite'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <button 
+              onClick={() => navigate('/rooms')}
+              className="text-sm bg-red-600/10 text-red-500 font-medium hover:bg-red-600/20 px-5 py-2.5 rounded-lg transition"
+            >
+              Leave Room
+            </button>
+          </div>
         </div>
 
         <div className="flex-1 flex gap-6 overflow-hidden">
-          
+
+          {/* Chat */}
           <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl flex flex-col overflow-hidden shadow-lg">
             <div className="p-4 border-b border-slate-800 bg-slate-900/80">
               <h2 className="font-semibold text-slate-200">Room Discussion</h2>
@@ -177,7 +244,9 @@ export default function Room() {
                           ? 'bg-blue-600 text-white rounded-br-sm' 
                           : 'bg-slate-800 text-slate-200 rounded-bl-sm border border-slate-700'
                       }`}>
-                        {msg.content}
+                        <Suspense fallback={<span className="text-slate-300">{msg.content}</span>}>
+                          <MarkdownRenderer content={msg.content} />
+                        </Suspense>
                       </div>
                     </div>
                   )
@@ -232,3 +301,33 @@ export default function Room() {
        </div>
       );
       }
+  {/* Whiteboard */}
+  <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg">
+    <Suspense fallback={<div className="h-full w-full animate-pulse bg-slate-800" />}>
+      <Whiteboard roomId={id!} />
+    </Suspense>
+  </div>
+
+  {/* Participants */}
+  <div className="w-64 bg-slate-900 border border-slate-800 rounded-xl flex-col hidden lg:flex overflow-hidden shadow-lg">
+    <div className="p-4 border-b border-slate-800 bg-slate-900/80">
+      <h2 className="font-semibold text-slate-200">Online ({participants.length})</h2>
+    </div>
+
+    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      {participants.map((p, idx) => (
+        <div key={idx} className="flex items-center gap-3">
+          <div className="w-2.5 h-2.5 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"></div>
+          <span className="text-slate-300 text-sm font-medium truncate">
+            {p.name || 'Anonymous Student'}
+          </span>
+        </div>
+      ))}
+    </div>
+  </div>
+
+</div>
+      </div>
+    </div>
+  );
+}
