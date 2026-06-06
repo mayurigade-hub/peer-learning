@@ -111,7 +111,7 @@ const Dashboard = () => {
           supabase
             .from("sessions")
             .select("title, created_at")
-            .eq("student_id", user.id)
+            .or(`student_id.eq.${user.id},mentor_id.eq.${user.id}`)
             .order("created_at", { ascending: false })
             .limit(3),
           supabase
@@ -128,6 +128,10 @@ const Dashboard = () => {
             .limit(3),
         ]);
 
+        if (sessionsRes.error) throw sessionsRes.error;
+        if (resourcesRes.error) throw resourcesRes.error;
+        if (roomsRes.error) throw roomsRes.error;
+
         const entries: { label: string; timestamp: string }[] = [];
 
         (sessionsRes.data ?? []).forEach((s: any) => {
@@ -143,6 +147,9 @@ const Dashboard = () => {
 
         entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
         setActivityFeed(entries.slice(0, 5));
+      } catch (err) {
+        console.error("Failed to fetch activity feed:", err);
+        setActivityFeed([]);
       } finally {
         setActivityLoading(false);
       }
