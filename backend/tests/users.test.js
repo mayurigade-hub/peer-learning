@@ -2,8 +2,6 @@ import request from "supertest";
 import { describe, it, expect, vi } from "vitest";
 import app from "../app.js";
 
-process.env.FRONTEND_URL = "http://localhost:3000";
-
 // Mock Supabase
 vi.mock("../utils/supabase.js", () => {
   return {
