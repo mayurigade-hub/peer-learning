@@ -36,13 +36,10 @@ const buildSupabaseMock = (currentUser, peers) => {
       or: vi.fn().mockReturnThis(),
       ilike: vi.fn().mockReturnThis(),
       single: vi.fn().mockResolvedValue({ data: resolvedData, error: null }),
-      // make the query itself awaitable (for the peers fetch which is not .single())
-      then: undefined,
+      then: function(resolve, reject) {
+        resolve({ data: resolvedData, error: null });
+      }
     };
-    // When the query is awaited directly (peers fetch), resolve with the array.
-    // Vitest / Node awaits via .then on the promise chain; we simulate by making
-    // range() the last builder before await.
-    q.range = vi.fn().mockResolvedValue({ data: resolvedData, error: null });
     return q;
   };
 
