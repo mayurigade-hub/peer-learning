@@ -86,7 +86,7 @@ export function useSessions(user: any) {
     if (!stillVisible) {
       setSelectedSession(filteredSessions.length > 0 ? filteredSessions[0] : null);
     }
-  }, [filteredSessions, selectedTab]);
+  }, [filteredSessions, selectedTab, selectedSession]);
 
   useEffect(() => {
     if (!selectedSession) return;
