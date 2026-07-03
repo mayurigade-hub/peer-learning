@@ -10,17 +10,17 @@ const TAB_TO_STATUS: Record<string, string[]> = {
   Joined: ["live"],
   Completed: ["ended"],
 };
-
+ 
 export function useSessions(user: any) {
   const { mutate: awardXP } = useAwardXP();
   const { toast } = useToast();
-
+ 
   const [sessions, setSessions] = useState<any[]>([]);
   const [messages, setMessages] = useState<any[]>([]);
   const [selectedTab, setSelectedTab] = useState("Upcoming");
   const [selectedSession, setSelectedSession] = useState<any>(null);
   const [search, setSearch] = useState("");
-
+ 
   const [activities, setActivities] = useState<any[]>([]);
   const [userStatus, setUserStatus] = useState("Active");
   const [typingUser, setTypingUser] = useState<string | null>(null);
@@ -29,13 +29,13 @@ export function useSessions(user: any) {
   const [sessionSummary, setSessionSummary] = useState<any>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [studyTime, setStudyTime] = useState(60 * 60);
-
+ 
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const channelRef = useRef<any>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const lastMoveRef = useRef(0);
   const awardedSessionsRef = useRef<Set<string | number>>(new Set());
-
+ 
   useEffect(() => {
     const fetchSessions = async () => {
       const { data, error } = await supabase
@@ -43,7 +43,7 @@ export function useSessions(user: any) {
         .select("*")
         .order("created_at", { ascending: false })
         .limit(50);
-
+ 
       if (!error && data) {
         setSessions(data);
         if (data.length > 0) {
@@ -51,18 +51,18 @@ export function useSessions(user: any) {
         }
       }
     };
-
+ 
     fetchSessions();
   }, []);
-
+ 
   const filteredSessions = useMemo(() => {
     let filtered = sessions;
-
+ 
     const allowedStatuses = TAB_TO_STATUS[selectedTab] || [];
     filtered = filtered.filter((s) =>
       allowedStatuses.includes(s.status?.toLowerCase())
     );
-
+ 
     if (search) {
       filtered = filtered.filter(
         (s) =>
@@ -70,10 +70,10 @@ export function useSessions(user: any) {
           s.tags?.join(" ").toLowerCase().includes(search.toLowerCase())
       );
     }
-
+ 
     return filtered;
   }, [sessions, selectedTab, search]);
-
+ 
   // Keep the selected session in sync with the active tab/filter.
   // If the currently selected session isn't in the filtered list anymore
   // (e.g. the user switched tabs), fall back to the first filtered session,
@@ -82,27 +82,35 @@ export function useSessions(user: any) {
     const stillVisible =
       selectedSession &&
       filteredSessions.some((s) => s.id === selectedSession.id);
-
+ 
     if (!stillVisible) {
       setSelectedSession(filteredSessions.length > 0 ? filteredSessions[0] : null);
     }
   }, [filteredSessions, selectedTab, selectedSession]);
-
+ 
+  // Reset the learner count immediately whenever the selected session changes
+  // (or is cleared). Without this, switching sessions can briefly show the
+  // previous session's participant count until the new session's presence
+  // sync event comes in and overwrites it with the real number.
+  useEffect(() => {
+    setParticipantCount(1);
+  }, [selectedSession]);
+ 
   useEffect(() => {
     if (!selectedSession) return;
-
+ 
     const fetchMessages = async () => {
       const { data } = await (supabase as any)
         .from("messages")
         .select("*")
         .eq("session_id", selectedSession.id)
         .order("created_at", { ascending: true });
-
+ 
       setMessages(data || []);
     };
-
+ 
     fetchMessages();
-
+ 
     const roomChannel = supabase.channel(`room:${selectedSession.id}`, {
       config: {
         presence: {
@@ -110,9 +118,9 @@ export function useSessions(user: any) {
         },
       },
     });
-
+ 
     channelRef.current = roomChannel;
-
+ 
     roomChannel
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload: any) => {
         if (payload.new.session_id === selectedSession.id) {
@@ -135,7 +143,7 @@ export function useSessions(user: any) {
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
           await roomChannel.track({ online_at: new Date().toISOString() });
-
+ 
           roomChannel.send({
             type: "broadcast",
             event: "activity",
@@ -147,29 +155,29 @@ export function useSessions(user: any) {
           });
         }
       });
-
+ 
     return () => {
       supabase.removeChannel(roomChannel);
     };
   }, [selectedSession, user]);
-
+ 
   useEffect(() => {
     if (!selectedSession) return;
     const timer = setInterval(() => {
       const start = new Date(selectedSession.start_time || selectedSession.created_at).getTime();
       const elapsed = Math.floor((Date.now() - start) / 1000);
       const remaining = Math.max(0, 3600 - elapsed);
-
+ 
       setStudyTime(remaining);
-
+ 
       if (remaining <= 0) {
         clearInterval(timer);
       }
     }, 1000);
-
+ 
     return () => clearInterval(timer);
   }, [selectedSession]);
-
+ 
   useEffect(() => {
     const handleActivity = () => {
       setUserStatus("Active");
@@ -178,20 +186,20 @@ export function useSessions(user: any) {
         setUserStatus("Idle");
       }, 15000);
     };
-
+ 
     const throttledMove = () => {
       const now = Date.now();
       if (now - lastMoveRef.current < 200) return;
       lastMoveRef.current = now;
       handleActivity();
     };
-
+ 
     window.addEventListener("mousemove", throttledMove, { passive: true });
     window.addEventListener("keydown", handleActivity, { passive: true });
     window.addEventListener("click", handleActivity, { passive: true });
-
+ 
     handleActivity();
-
+ 
     return () => {
       clearTimeout(idleTimerRef.current);
       window.removeEventListener("mousemove", throttledMove);
@@ -199,7 +207,7 @@ export function useSessions(user: any) {
       window.removeEventListener("click", handleActivity);
     };
   }, []);
-
+ 
   const handleJoinSession = useCallback(async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     try {
@@ -209,7 +217,7 @@ export function useSessions(user: any) {
         .eq("session_id", sessionId)
         .eq("user_id", user?.id)
         .maybeSingle();
-
+ 
       const { error } = await supabase.rpc("join_session", { p_session_id: sessionId });
       if (error) {
         if (error.message.includes("Session is full")) {
@@ -219,7 +227,11 @@ export function useSessions(user: any) {
         }
       } else {
         toast({ title: "Success! 🎉", description: "You have joined the session." });
-
+ 
+        // Only award XP here, after join_session has actually succeeded and
+        // confirmed the user as a participant. This is the single source of
+        // truth for "session_join" XP — handleJoinVideo must NOT award it,
+        // since opening the video does not by itself confirm participation.
         if (!existingParticipant) {
           awardedSessionsRef.current.add(sessionId);
           awardXP({ activity: "session_join" });
@@ -229,16 +241,16 @@ export function useSessions(user: any) {
       toast({ title: "Error", description: err.message || "Failed to join session.", variant: "destructive" });
     }
   }, [user, awardXP, toast]);
-
+ 
   const sendMessage = useCallback(async (msgText: string) => {
     if (!msgText.trim() || !selectedSession) return;
-
+ 
     const activity = {
       id: Date.now(),
       text: `${user?.user_metadata?.full_name || "Someone"} sent a message`,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
-
+ 
     if (channelRef.current) {
       channelRef.current.send({
         type: "broadcast",
@@ -246,7 +258,7 @@ export function useSessions(user: any) {
         payload: activity,
       });
     }
-
+ 
     try {
       const { error } = await (supabase as any)
         .from("messages")
@@ -256,13 +268,13 @@ export function useSessions(user: any) {
           username: user?.user_metadata?.full_name || "Anonymous",
           message: msgText,
         });
-
+ 
       if (error) throw error;
     } catch (err: any) {
       toast({ title: "Failed to send message", description: err.message || "An unexpected error occurred.", variant: "destructive" });
     }
   }, [selectedSession, user, toast]);
-
+ 
   const sendTypingEvent = useCallback(() => {
     if (channelRef.current) {
       channelRef.current.send({
@@ -272,17 +284,17 @@ export function useSessions(user: any) {
       });
     }
   }, [user]);
-
+ 
   const handleLeaveVideo = useCallback(async () => {
     setIsVideoActive(false);
-
+ 
     if (!selectedSession || messages.length === 0) return;
-
+ 
     try {
       setSummaryLoading(true);
-
+ 
       const { data: { session } } = await supabase.auth.getSession();
-
+ 
       const res = await fetch(`${API_BASE_URL}/api/ai/generate-summary`, {
         method: "POST",
         headers: {
@@ -292,14 +304,14 @@ export function useSessions(user: any) {
         credentials: "include",
         body: JSON.stringify({ messages }),
       });
-
+ 
       if (!res.ok) {
         throw new Error("Failed to generate summary");
       }
-
+ 
       const parsedData = await res.json();
       setSessionSummary(parsedData);
-
+ 
       await (supabase as any)
         .from("session_summaries")
         .insert({
@@ -313,15 +325,16 @@ export function useSessions(user: any) {
       setSummaryLoading(false);
     }
   }, [selectedSession, messages]);
-
+ 
+  // NOTE: This no longer awards "session_join" XP. Opening the video call is
+  // not proof of confirmed participation — only a successful `join_session`
+  // RPC call (handled in handleJoinSession) confirms that, so that's the
+  // only place XP is granted. This closes the XP-farming hole where a user
+  // could click "Join Video" without ever clicking "Join Session".
   const handleJoinVideo = useCallback(() => {
     setIsVideoActive(true);
-    if (selectedSession && !awardedSessionsRef.current.has(selectedSession.id)) {
-      awardedSessionsRef.current.add(selectedSession.id);
-      awardXP({ activity: 'session_join' });
-    }
-  }, [awardXP, selectedSession]);
-
+  }, []);
+ 
   return {
     sessions,
     filteredSessions,
