@@ -1,4 +1,5 @@
 import React from "react";
+import { AlertTriangle, RefreshCw, Home } from "lucide-react";
 
 interface Props {
   children: React.ReactNode;
